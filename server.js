@@ -6,13 +6,14 @@ const session = require("express-session");
 const Database = require("better-sqlite3");
 
 const app = express();
-const PORT = process.env.PORT || 3000 ;
+const PORT = process.env.PORT || 3000;
 
 const db = new Database(path.join(__dirname, "crm.db"));
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const SESSION_SECRET = process.env.SESSION_SECRET;
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS leads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,12 +54,10 @@ function requireLogin(req, res, next) {
   return res.status(401).json({ error: "Please log in first." });
 }
 
-// Check whether the current user is logged in
 app.get("/api/auth/check", (req, res) => {
   res.json({ authenticated: Boolean(req.session.isAdmin) });
 });
 
-// Admin login
 app.post("/api/auth/login", (req, res, next) => {
   const { username, password } = req.body || {};
 
@@ -68,7 +67,9 @@ app.post("/api/auth/login", (req, res, next) => {
     username !== ADMIN_USERNAME ||
     password !== ADMIN_PASSWORD
   ) {
-    return res.status(401).json({ error: "Incorrect username or password." });
+    return res.status(401).json({
+      error: "Incorrect username or password."
+    });
   }
 
   req.session.regenerate(error => {
@@ -79,19 +80,22 @@ app.post("/api/auth/login", (req, res, next) => {
   });
 });
 
-// Admin logout
 app.post("/api/auth/logout", (req, res, next) => {
   req.session.destroy(error => {
     if (error) return next(error);
-    res.clearCookie("connect.sid");
+
+    res.clearCookie("connect.sid", {
+      httpOnly: true,
+      sameSite: "none",
+      secure: true
+    });
+
     res.json({ message: "Logged out successfully." });
   });
 });
 
-// All lead operations require login
 app.use("/api/leads", requireLogin);
 
-// Get leads
 app.get("/api/leads", (req, res) => {
   try {
     res.json(db.prepare("SELECT * FROM leads ORDER BY id DESC").all());
@@ -101,7 +105,6 @@ app.get("/api/leads", (req, res) => {
   }
 });
 
-// Add a lead
 app.post("/api/leads", (req, res) => {
   try {
     const { name, email, source } = req.body || {};
@@ -117,7 +120,9 @@ app.post("/api/leads", (req, res) => {
     }
 
     if (name.length > 100 || email.length > 254 || source.length > 100) {
-      return res.status(400).json({ error: "One or more fields are too long." });
+      return res.status(400).json({
+        error: "One or more fields are too long."
+      });
     }
 
     const result = db.prepare(`
@@ -126,7 +131,8 @@ app.post("/api/leads", (req, res) => {
     `).run(name.trim(), email.trim(), source.trim());
 
     res.status(201).json(
-      db.prepare("SELECT * FROM leads WHERE id = ?").get(result.lastInsertRowid)
+      db.prepare("SELECT * FROM leads WHERE id = ?")
+        .get(result.lastInsertRowid)
     );
   } catch (error) {
     console.error(error);
@@ -134,7 +140,6 @@ app.post("/api/leads", (req, res) => {
   }
 });
 
-// Update status and/or notes
 app.patch("/api/leads/:id", (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -151,9 +156,13 @@ app.patch("/api/leads/:id", (req, res) => {
       return res.status(400).json({ error: "Invalid lead status." });
     }
 
-    if (notes !== undefined &&
-        (typeof notes !== "string" || notes.length > 1000)) {
-      return res.status(400).json({ error: "Notes must be text up to 1000 characters." });
+    if (
+      notes !== undefined &&
+      (typeof notes !== "string" || notes.length > 1000)
+    ) {
+      return res.status(400).json({
+        error: "Notes must be text up to 1000 characters."
+      });
     }
 
     db.prepare(`
@@ -167,7 +176,6 @@ app.patch("/api/leads/:id", (req, res) => {
   }
 });
 
-// Delete a lead
 app.delete("/api/leads/:id", (req, res) => {
   try {
     const id = Number(req.params.id);
