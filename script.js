@@ -1,3 +1,5 @@
+const API_BASE_URL = "https://future-fs-02-hqyb.onrender.com";
+
 const leadsTable = document.getElementById("leadsTable");
 const leadDialog = document.getElementById("leadDialog");
 const leadForm = document.getElementById("leadForm");
@@ -11,16 +13,21 @@ const appScreen = document.querySelector(".app");
 let leads = [];
 
 async function apiRequest(url, options = {}) {
-  const response = await fetch(url, {
+  const response = await fetch(`${API_BASE_URL}${url}`, {
     ...options,
-    credentials: "same-origin",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...options.headers
     }
   });
 
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("The server returned an invalid response.");
+  }
 
   if (!response.ok) {
     throw new Error(data.error || "Something went wrong.");
@@ -32,11 +39,7 @@ async function apiRequest(url, options = {}) {
 // LOGIN CHECK
 async function checkLogin() {
   try {
-    const response = await fetch("/api/auth/check", {
-      credentials: "same-origin"
-    });
-
-    const result = await response.json();
+    const result = await apiRequest("/api/auth/check");
 
     loginScreen.style.display = result.authenticated ? "none" : "flex";
     appScreen.style.display = result.authenticated ? "" : "none";
@@ -50,7 +53,9 @@ async function checkLogin() {
   } catch (error) {
     loginScreen.style.display = "flex";
     appScreen.style.display = "none";
-    loginError.textContent = "Cannot connect to the server. Please restart it.";
+    loginError.textContent =
+      "Cannot connect to the server. Please try again.";
+    console.error("Login check failed:", error);
   }
 }
 
@@ -85,9 +90,7 @@ loginForm.addEventListener("submit", async event => {
 // LOGOUT
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   try {
-    await apiRequest("/api/auth/logout", {
-      method: "POST"
-    });
+    await apiRequest("/api/auth/logout", { method: "POST" });
 
     leads = [];
     updateStats();
@@ -185,7 +188,6 @@ function renderLeads() {
           method: "PATCH",
           body: JSON.stringify({ status: statusSelect.value })
         });
-
         await loadLeads();
       } catch (error) {
         alert(error.message);
@@ -215,7 +217,6 @@ function renderLeads() {
           method: "PATCH",
           body: JSON.stringify({ notes: notesInput.value })
         });
-
         await loadLeads();
       } catch (error) {
         alert(error.message);
@@ -238,7 +239,6 @@ function renderLeads() {
         await apiRequest(`/api/leads/${lead.id}`, {
           method: "DELETE"
         });
-
         await loadLeads();
       } catch (error) {
         alert(error.message);
@@ -267,7 +267,10 @@ async function loadLeads() {
     renderLeads();
   } catch (error) {
     if (error.message === "Please log in first.") {
-      await checkLogin();
+      loginScreen.style.display = "flex";
+      appScreen.style.display = "none";
+      leads = [];
+      updateStats();
       return;
     }
 
@@ -283,7 +286,7 @@ async function loadLeads() {
     row.appendChild(cell);
     leadsTable.appendChild(row);
 
-    console.error(error);
+    console.error("Loading leads failed:", error);
   }
 }
 
